@@ -1,27 +1,23 @@
 # coding:utf-8
 import argparse
-import gym
 import numpy as np
-import pickle
 import chainer
 from chainer import functions as F
 from chainer import links as L
 from chainer import cuda
 from models.PredNet import PredNet
 from chainer import serializers
-
-import time
-
-from movie_utils import make_movie
 import time
 
 
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--gpu', '-g', default=-1, type=int, help='GPU ID (negative value indicates CPU)')
-parser.add_argument('--log-file', '-l', default='reward.log', type=str, help='reward log file name')
-parser.add_argument('--epoch', '-e', default='1000', type=int, help='learning epoch')
+parser.add_argument('--epoch', '-e', default='10000', type=int, help='learning epoch')
+parser.add_argument('--unchain_step', '-u', default='100', type=int, help='unchain freq')
+parser.add_argument('--save_step', '-s', default='500', type=int, help='model save freq')
 args = parser.parse_args()
+
 
 class PredNet2Layer(chainer.Chain):
 
@@ -43,34 +39,30 @@ class PredNet2Layer(chainer.Chain):
 
 
 
-def learn(movie_type = "nothing", npz_file_name = None):
+def learn(data_root_dir="./movies/"):
     """
-    movie.pickleを用いて，PredNetの学習を行う
+    movie : npy file (preprocessed)
     Returns:
 
     """
-    print "movie type : " , movie_type
-    print "npz file name : " , npz_file_name
 
-    data = pickle.load(open("./movies/" + movie_type  + "_movie.pkl","r"))
-    print "movie " , movie_type , " loaded"
+    train_data = np.load(data_root_dir + "train/train.npy" )
+    print "movie  loaded"
     xp = cuda.cupy if args.gpu >= 0 else np
     model = L.Classifier( PredNet2Layer(width=160, height=128, channels=[3,48,96,192], batchSize=1 ), lossfun=F.mean_squared_error)
     model.compute_accuracy = False
-    if npz_file_name is not None :
-        # load params
-        serializers.load_npz("./models/" +  npz_file_name +"_model.npz",model)
-        print "model loaded"
-
-
 
 
     # load model
     #model = pickle.load(open("./model.pkl"))
 
     if args.gpu >= 0:
+        print "get device"
         cuda.get_device(args.gpu).use()
+
         xp = cuda.cupy
+        print "to_gpu"
+        cuda.get_device(args.gpu).use()
         model.to_gpu()
         print('Running on a GPU')
     else:
@@ -79,76 +71,61 @@ def learn(movie_type = "nothing", npz_file_name = None):
     optimizer = chainer.optimizers.Adam()
     optimizer.setup(model)
 
-    train_movie = data[:-1]
-    train_teacher = data[1:]
+    train_movie = train_data[:,:-1]
+    train_teacher = train_data[:,1:]
 
-    print "data size(s)"
-    print train_movie.shape , train_teacher.shape
+    print "data size(s)", train_movie.shape , train_teacher.shape
 
-    acc_loss = 0
+    # learning loop
     for epoch in range(args.epoch):
         print "epoch (" , epoch , ") start "
-        # movie number loop
-        model.predictor.reset_state()
-        x = F.expand_dims(chainer.Variable(xp.array(train_movie[0])) ,axis = 0)
+      
+        # model save
+        if epoch % args.save_step == 0 :
+            serializers.save_npz("2Layer_" + str(epoch) + "_" + "model.npz" , model)
+            print "model saved"
 
+        acc_loss = 0
 
-        # for sequence
-        loss = 0
-        for i in range(len(train_movie)):
-            t = F.expand_dims(chainer.Variable(xp.array(train_teacher[i])) , axis = 0 )
-            loss += model(x, t)
-            x = model.y.data
+        # movie loop
+        for movie, teacher in zip(train_movie,train_teacher):
+            model.predictor.reset_state()
+            loss = 0
+            # frame loop 
+            for frame in range(len(movie)):
+                #t = F.expand_dims(chainer.Variable(xp.array(train_teacher[i])) , axis = 0 )
+                x = F.expand_dims(chainer.Variable(xp.array(movie[frame])) , axis = 0 )
+                t = F.expand_dims(chainer.Variable(xp.array(teacher[frame])) , axis = 0 )
+                loss += model(x, t)
 
-        #learning technique for LSTM/RNN
-        model.zerograds()
-        loss.backward()
-        loss.unchain_backward()
-        print("model updated")
-        print(" loss : " ,  loss.data)
-        acc_loss += loss
-        loss = 0
-        optimizer.update()
+                #learning technique for LSTM/RNN
+                if frame % args.unchain_step == 0:
+                    model.zerograds()
+                    loss.backward()
+                    loss.unchain_backward()
+                    optimizer.update()
 
+                    acc_loss += loss.data
+                    loss = 0
 
-    serializers.save_npz("2Layer_" + str(epoch) + "_" + "in_nothing_normal_abnormal_model.npz" , model)
-    if args.gpu >= 0: model.to_cpu()
-    print "model saving"
-    pickle.dump(model,open("2Layer_" + str(epoch) + "_" + "model.pkl" , "wb") , -1)
+        print "acc_loss : " , acc_loss
 
-def observe(file_name = "movie"):
-    """
-    背景学習のための，観測スクリプト
-    前進し続け，動画をpickle形式で保存する
+    serializers.save_npz("2Layer_" + str(epoch) + "_" + "model.npz" , model)
 
-    Returns: (movie.pkl)
-    """
-
-    # 前進のみ行う
-    action = 0
-    env = gym.make('Lis-v2')
-    observation = env.reset()
-    observation, reward, end_episode, _ = env.step(action)
-
-    seq_len = 30 + 1
-    data = np.zeros( (seq_len , 3 ,128 , 160) , dtype=np.float32)
-
-    for seq in range(seq_len):
-        # 現在の環境では，5ステップ前後で1周
-        observation, reward, end_episode, _ = env.step(action)
-        image = np.array(observation["image"][0].resize((160,128))).transpose(2, 0, 1)[::-1].astype(np.float32) / 255
-        data[seq] = image
-
-
-    print "data generated " , data.shape
-    pickle.dump(data,open(file_name + ".pkl","wb"),-1)
-
-    env.close()
 
 if __name__ == "__main__":
+  
+    
 
     start = time.time()
-    learn(movie_type="normal",npz_file_name="2Layer_999_in_nothing")
+    learn()
     elapsed_time = time.time() - start
     print ("elapsed_time:{0}".format(elapsed_time)) + "[sec]"
+
+    # load example
+    #model = L.Classifier( PredNet2Layer(width=160, height=128, channels=[3,48,96,192], batchSize=1 ), lossfun=F.mean_squared_error)
+    #model.compute_accuracy = False
+    #serializers.load_npz("2Layer_0_model.npz",model)
+    #print "load success"
+
 

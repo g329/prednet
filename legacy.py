@@ -1,12 +1,17 @@
 # coding:utf-8
 import argparse
+import gym
 import numpy as np
+import pickle
 import chainer
 from chainer import functions as F
 from chainer import links as L
 from chainer import cuda
 from models.PredNet import PredNet
 from chainer import serializers
+
+import time
+
 import time
 
 
@@ -38,12 +43,13 @@ class PredNet1Layer(chainer.Chain):
 
 def learn(data_root_dir="./movies/"):
     """
-    movie : npy file (preprocessed)
+    movie.pickleを用いて，PredNetの学習を行う
     Returns:
 
     """
 
     train_data = np.load(data_root_dir + "train/train.npy" )
+    print train_data.shape
     print "movie  loaded"
     xp = cuda.cupy if args.gpu >= 0 else np
     model = L.Classifier( PredNet1Layer(width=160, height=128, channels=[3,48,96,192], batchSize=1 ), lossfun=F.mean_squared_error)
@@ -71,9 +77,9 @@ def learn(data_root_dir="./movies/"):
     train_movie = train_data[:,:-1]
     train_teacher = train_data[:,1:]
 
-    print "data size(s)", train_movie.shape , train_teacher.shape
+    print "data size(s)"
+    print train_movie.shape , train_teacher.shape
 
-    # learning loop
     for epoch in range(args.epoch):
         print "epoch (" , epoch , ") start "
       
@@ -83,10 +89,12 @@ def learn(data_root_dir="./movies/"):
             print "model saved"
 
         acc_loss = 0
+        model.predictor.reset_state()
 
         # movie loop
         for movie, teacher in zip(train_movie,train_teacher):
-            model.predictor.reset_state()
+            #x = F.expand_dims(chainer.Variable(xp.array(train_movie[0])) ,axis = 0)
+
             loss = 0
             # frame loop 
             for frame in range(len(movie)):
@@ -100,14 +108,58 @@ def learn(data_root_dir="./movies/"):
                     model.zerograds()
                     loss.backward()
                     loss.unchain_backward()
-                    optimizer.update()
 
                     acc_loss += loss.data
                     loss = 0
+                    optimizer.update()
 
         print "acc_loss : " , acc_loss
 
+    # movie generate
+    #test_data = pickle.load(open("./movies/" + movie_type  + "_movie.pkl","r"))
+
+    #movie_len = 60
+    #size = (160,128)
+    #movie = np.zeros((movie_len,3 ,size[0],size[1]),dtype=np.float32)
+    #for i, seq in enumerate(range(movie_len)):
+    #    # 現在の環境では，5ステップ前後で1周
+    #    _ = model(seq, seq)
+    #    image = np.asarray( model.y.data)
+    #    movie[i] = image
+
+
+
+    #pickle.dump(model,open("1Layer_Test_" + str(epoch) + "_" + "movie.pkl" , "wb") , -1)
+
     serializers.save_npz("1Layer_" + str(epoch) + "_" + "model.npz" , model)
+
+def make_error_movie(model_file="./model.pkl", movie_len = 60,input_movie="./movies/normal_movie.pkl",out_name="output_movie.mp4"):
+    """
+    既存のモデルを読み込み，ある環境でのエラーを動画化する
+
+    Args:
+        model: pickle file
+
+    Returns:
+
+    """
+    size = (160,128)
+
+    data = pickle.load(open(input_movie,"rb"))
+    model = pickle.load(open(model_file,"rb"))
+
+    movie = np.zeros((movie_len,3 ,size[0],size[1]),dtype=np.float32)
+
+    for i, seq in enumerate(range(movie_len)):
+        # 現在の環境では，5ステップ前後で1周
+        _ = model(seq, seq)
+        image = model.y.data
+        movie[i] = image
+    # TODO make numpy array	
+    #make_movie(movie,file_name=out_name,fps=30)
+
+
+
 
 
 if __name__ == "__main__":

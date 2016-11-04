@@ -129,7 +129,7 @@ def make_teacher_signal(nparray_movies):
 
 
 if __name__ == "__main__":
-    # DO CONVERT MP4 TO PICKLE
+    # DO CONVERT MP4 TO NPY
     parser = argparse.ArgumentParser(description='movie pre-process.')
     parser.add_argument('--directory', '-d', default="train", type=str, help="targt directory")
     args = parser.parse_args()
