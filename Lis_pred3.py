@@ -116,7 +116,7 @@ def learn(data_root_dir="./movies/"):
 
 if __name__ == "__main__":
      
-    
+    print args    
 
     start = time.time()
     learn()

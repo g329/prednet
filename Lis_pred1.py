@@ -18,6 +18,7 @@ parser.add_argument('--unchain_step', '-u', default='100', type=int, help='uncha
 parser.add_argument('--save_step', '-s', default='500', type=int, help='model save freq')
 args = parser.parse_args()
 
+
 class PredNet1Layer(chainer.Chain):
 
     def __init__(self , width , height , channels, batchSize):
@@ -112,8 +113,7 @@ def learn(data_root_dir="./movies/"):
 
 if __name__ == "__main__":
   
-    
-
+    print args
     start = time.time()
     learn()
     elapsed_time = time.time() - start
