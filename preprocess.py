@@ -137,6 +137,7 @@ if __name__ == "__main__":
   
     # in docker
     movie_name_list = get_movie_filename(path=root_path,directory=args.directory)
+    print movie_name_list
     movies = get_movies(full_paths = movie_name_list,)
     print movies.shape
     np.save(root_path + "/" + args.directory + "/train.npy",movies)
