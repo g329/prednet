@@ -6,8 +6,9 @@ FROM ubuntu:14.04
 
 # check host CUDA version
 #FROM nvidia/cuda:7.5-cudnn5-devel
-
+#
 RUN mkdir OpenCV && cd OpenCV
+
 
 RUN apt-get update && apt-get install -y \
   build-essential \
@@ -45,9 +46,16 @@ RUN apt-get update && apt-get install -y \
   # Doesn't work ffmpeg \
   libgtk2.0-dev \
   # zlib1g-dev \
-  # libavcodec-dev \
+  libavcodec-dev \
   unzip \
+  gstreamer1.0 \
   wget
+
+#RUN apt-get install -y software-properties-common && \
+#    add-apt-repository ppa:mc3man/trusty-media && \
+#    sudo apt update && \
+#    apt install -y ffmpeg && \
+   
 
 RUN cd /opt && \
   wget https://github.com/Itseez/opencv/archive/3.1.0.zip -O opencv-3.1.0.zip -nv && \
@@ -65,7 +73,7 @@ RUN cd /opt && \
     -D WITH_V4L=ON \
     -D BUILD_TIFF=ON \
     -D WITH_QT=ON \
-    # -D USE_GStreamer=ON \
+    -D USE_GStreamer=ON \
     -D WITH_OPENGL=ON .. && \
   make -j4 && \
   make install && \
@@ -89,6 +97,7 @@ RUN pip install -U "mock"
 RUN pip install -U "coverage"
 RUN pip install -U "chainer"
 RUN apt-get -y install python-imaging
+RUN apt-get -y install gstreamer-tools 
 
 
 

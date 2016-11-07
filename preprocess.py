@@ -95,9 +95,10 @@ def make_movie(nparray_movie, file_name, fps):
     """
 
     # fps = movie.get(cv.CAP_PROP_FPS)
-    width = nparray_movie.shape[2]
-    height = nparray_movie.shape[3]
-    fourcc = cv.VideoWriter_fourcc('m', 'p', '4', 'v')
+    width = nparray_movie.shape[3]
+    height = nparray_movie.shape[2]
+    #fourcc = cv.VideoWriter_fourcc('P', 'I', 'M', '1')
+    fourcc = cv.VideoWriter_fourcc(*'XVID')
     vout = cv.VideoWriter()
     success = vout.open(file_name, fourcc, fps, (width, height), True)
     for _image in nparray_movie:
@@ -106,6 +107,8 @@ def make_movie(nparray_movie, file_name, fps):
         cv_image = cv.cvtColor(np.array(pil_image), cv.COLOR_RGB2BGR)
         vout.write(cv.resize(cv_image, (width, height)))
     vout.release()
+    del vout
+    print file_name , "made" 
 
 
 def make_teacher_signal(nparray_movies):
