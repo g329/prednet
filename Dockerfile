@@ -98,7 +98,14 @@ RUN pip install -U "coverage"
 RUN pip install -U "chainer"
 RUN apt-get -y install python-imaging
 RUN apt-get -y install gstreamer-tools 
+RUN apt-get -y install python-tk 
 
+RUN pip install -U "matplotlib"
+RUN pip install -U "python-dateutil"
+RUN sudo apt-get install -y build-essential python-dev python-setuptools \
+                     python-numpy python-scipy \
+                     libatlas-dev libatlas3gf-base
+RUN sudo pip install -U "scikit-learn"
 
 
 
