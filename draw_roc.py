@@ -1,3 +1,6 @@
+# coding:utf-8
+import argparse
+import time
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -5,34 +8,106 @@ import pylab as pl
 from sklearn import svm, datasets
 from sklearn.utils import shuffle
 from sklearn.metrics import roc_curve, auc
+import chainer
+from chainer import cuda
+import chainer.functions as F
+import chainer.links as L
+from chainer import training
+from chainer.training import extensions
+from chainer import reporter
+from chainer import serializers
+
+from preprocess import get_movie_filename
+from preprocess import get_movies
+from Lis_pred1 import PredNet1Layer
+from Lis_pred2 import PredNet2Layer
+from Lis_pred3 import PredNet3Layer
+
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--gpu', '-g', default=-1, type=int, help='GPU ID (negative value indicates CPU)')
+parser.add_argument('--len',  type=int , default=600)
+args = parser.parse_args()
 
 
-random_state = np.random.RandomState(0)
 
-# Import some data to play with
-iris = datasets.load_iris()
-X = iris.data
-y = iris.target
+file_names = sorted(get_movie_filename(path="./workspace/movies", directory = "test"))
+anomaly_files = ["3-a-1.mp4","3-a-2.mp4","3-a-3.mp4","3-a-4.mp4","3-a-5.mp4"] # 3-a-1 is 0 
 
-# Make it a binary classification problem by removing the third class
-X, y = X[y != 2], y[y != 2]
-n_samples, n_features = X.shape
 
-# Add noisy features to make the problem harder
-X = np.c_[X, random_state.randn(n_samples, 200 * n_features)]
+# prepare data
+error_csv = open("./workspace/movies/test/error.csv","r")
+labels  = []
+for line in error_csv:
+    line = line.replace("\r\n","").split(",")[1:]
+    line = map(lambda x : 0 if x == "" else 1, line)
+    labels.append(line)
 
-# shuffle and split training and test sets
-X, y = shuffle(X, y, random_state=random_state)
-half = int(n_samples / 2)
-X_train, X_test = X[:half], X[half:]
-y_train, y_test = y[:half], y[half:]
+    
+labels = np.array(labels)
+labels = labels.T
+labels = np.r_[labels , np.zeros((labels.shape))] # anomaly * 5 , normal * 5
 
-# Run classifier
-classifier = svm.SVC(kernel='linear', probability=True)
-probas_ = classifier.fit(X_train, y_train).predict_proba(X_test)
+
+# load classifier
+model = L.Classifier( PredNet1Layer(width=160, height=128, channels=[3,48,96,192], batchSize=1 ), lossfun=F.mean_squared_error)
+model.compute_accuracy = False
+serializers.load_npz("./workspace/models/1Layer_99_model.npz",model)
+
+if args.gpu >= 0 :
+    cuda.get_device(args.gpu).use()
+    model.to_gpu()
+    print('Running on a GPU')
+else:
+    print('Running on a CPU')
+
+
+
+whole_loss = []
+whole_label = []
+
+# 初回実行時のみ
+#size = (160,128)
+#movies = get_movies(file_names, frame_count=600, size=size)
+#np.save("./workspace/movies/test/test.npy", movies)
+
+# 次回以降
+movies = np.load("./workspace/movies/test/test.npy")
+print movies.shape
+
+ 
+for movie_id , movie_name in enumerate(sorted(file_names)):
+    model.predictor.reset_state()
+    movie = movies[movie_id][:-1]
+    teacher = movies[movie_id][1:]
+
+    # label select
+    if movie_name.split("/")[-1] in anomaly_files:
+        label = labels[anomaly_files.index(movie_name.split("/")[-1])]
+    else:
+        # 正常動画の場合
+        label = np.zeros((1,598))
+        continue
+
+
+    # ラベルの長さだけlossを出力
+    for t in range(10):#range(len(label)) :
+        start = time.time()
+        loss = model(F.expand_dims(chainer.Variable(movie[t],volatile=True) , axis = 0), F.expand_dims(chainer.Variable(teacher[t],volatile=True) ,axis=0 ))
+        whole_loss.append(loss.data)
+        whole_label.append(label[t])
+        elapsed_time = time.time() - start
+        print ("elapsed_time:{0}".format(elapsed_time)) + "[sec]"
+
+
+
+
+
+
+
 
 # Compute ROC curve and area the curve
-fpr, tpr, thresholds = roc_curve(y_test, probas_[:, 1])
+fpr, tpr, thresholds = roc_curve(whole_label, whole_loss )
+print fpr , tpr , thresholds
 roc_auc = auc(fpr, tpr)
 print "Area under the ROC curve : %f" % roc_auc
 
@@ -44,6 +119,5 @@ pl.xlim([0.0, 1.0])
 pl.ylim([0.0, 1.0])
 pl.xlabel('False Positive Rate')
 pl.ylabel('True Positive Rate')
-pl.title('Receiver operating characteristic example')
 pl.legend(loc="lower right")
-pl.savefig("/workspace/test.png" , format = "png")
+pl.savefig("/workspace/roc.png" , format = "png")
