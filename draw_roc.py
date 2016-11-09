@@ -66,13 +66,13 @@ whole_loss = []
 whole_label = []
 
 # 初回実行時のみ
-#size = (160,128)
-#movies = get_movies(file_names, frame_count=600, size=size)
-#np.save("./workspace/movies/test/test.npy", movies)
+size = (160,128)
+movies = get_movies(file_names, frame_count=600, size=size)
+np.save("./workspace/movies/test/test.npy", movies)
 
 # 次回以降
-movies = np.load("./workspace/movies/test/test.npy")
-print movies.shape
+#movies = np.load("./workspace/movies/test/test.npy")
+#print movies.shape
 
  
 for movie_id , movie_name in enumerate(sorted(file_names)):
@@ -86,17 +86,12 @@ for movie_id , movie_name in enumerate(sorted(file_names)):
     else:
         # 正常動画の場合
         label = np.zeros((1,598))
-        continue
-
 
     # ラベルの長さだけlossを出力
     for t in range(10):#range(len(label)) :
-        start = time.time()
         loss = model(F.expand_dims(chainer.Variable(movie[t],volatile=True) , axis = 0), F.expand_dims(chainer.Variable(teacher[t],volatile=True) ,axis=0 ))
         whole_loss.append(loss.data)
         whole_label.append(label[t])
-        elapsed_time = time.time() - start
-        print ("elapsed_time:{0}".format(elapsed_time)) + "[sec]"
 
 
 
