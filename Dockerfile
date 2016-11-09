@@ -2,10 +2,10 @@
 #
 # Dockerfile to build latest OpenCV with Python2, Python3 and Java binding support.
 #
-FROM ubuntu:14.04
+#FROM ubuntu:14.04
 
 # check host CUDA version
-#FROM nvidia/cuda:7.5-cudnn5-devel
+FROM nvidia/cuda:7.5-cudnn5-devel
 #
 RUN mkdir OpenCV && cd OpenCV
 

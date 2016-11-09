@@ -43,6 +43,7 @@ def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp
     """
 
     movie_name_list = get_movie_filename(path="./workspace/movies",directory="test")
+    print movie_name_list[:2]
     size = (160,128)
     movies = get_movies(movie_name_list, frame_count=args.len, size=size)
 
@@ -61,10 +62,10 @@ def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp
         print('Running on a CPU')
 
     predict_movie = np.zeros((movie_len - 1, 3 ,size[1],size[0]),dtype=np.float32)
-    for i in range(len(movies)):
-        make_movie(movies[i],file_name="./workspace/movie_"+ str(i) + "_real.avi",fps=30)
+    #for i in range(len(movies)):
+    #    make_movie(movies[i],file_name="./workspace/movie_"+ str(i) + "_real.avi",fps=30)
 
-    for i in range(len(movies)):
+    for i in range(2):#range(len(movies)):
         model.predictor.reset_state()
         x = movies[i]
         teacher = movies[i][1:]
@@ -79,6 +80,7 @@ def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp
                 image = chainer.cuda.to_cpu(model.y.data)
             else:
                 image = model.y.data
+            break
             generated_movie[frame] = image
         model_name = args.model.split(".")[0]
         make_movie(generated_movie,file_name="./workspace/"+ model_name +"_predicted_movie_"+ str(i)+".avi",fps=30)
