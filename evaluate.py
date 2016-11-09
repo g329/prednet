@@ -29,7 +29,7 @@ parser.add_argument('--out_name',  type=str , default="/workspace/output_movie.a
 parser.add_argument('--data_root_path',  type=str , default="./movies/test/")
 args = parser.parse_args()
 
-xp = chainer.cuda if args.gpu >= 0 else np
+xp = chainer.cuda.cupy if args.gpu >= 0 else np
 
 
 def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp4"):
