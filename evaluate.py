@@ -29,6 +29,7 @@ parser.add_argument('--out_name',  type=str , default="/workspace/output_movie.a
 parser.add_argument('--data_root_path',  type=str , default="./movies/test/")
 args = parser.parse_args()
 
+xp = chainer.cuda if args.gpu >= 0 else np
 
 
 def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp4"):
@@ -70,10 +71,14 @@ def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp
 
         generated_movie = np.zeros((len(teacher),3,size[1] , size[0]),dtype=np.float32)
         for frame, teacher in enumerate(teacher):
-            seq = F.expand_dims(x[frame] , axis=0)
-            t = F.expand_dims(teacher , axis=0)
+            seq = F.expand_dims(xp.array(x[frame]) , axis=0)
+            t = F.expand_dims(xp.array(teacher) , axis=0)
             loss = model(seq, t)
-            image = model.y.data
+            if args.gpu >= 0:
+                model.y.to_cpu()
+                image = chainer.cuda.to_cpu(model.y.data)
+            else:
+                image = model.y.data
             generated_movie[frame] = image
         model_name = args.model.split(".")[0]
         make_movie(generated_movie,file_name="./workspace/"+ model_name +"_predicted_movie_"+ str(i)+".avi",fps=30)
