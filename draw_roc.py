@@ -53,9 +53,12 @@ model = L.Classifier( PredNet1Layer(width=160, height=128, channels=[3,48,96,192
 model.compute_accuracy = False
 serializers.load_npz("./workspace/models/1Layer_99_model.npz",model)
 
+xp = chainer.cuda.cupy if args.gpu >= 0 else np
+
 if args.gpu >= 0 :
     cuda.get_device(args.gpu).use()
     model.to_gpu()
+    model.predictor.to_gpu()
     print('Running on a GPU')
 else:
     print('Running on a CPU')
@@ -66,16 +69,17 @@ whole_loss = []
 whole_label = []
 
 # 初回実行時のみ
-size = (160,128)
-movies = get_movies(file_names, frame_count=600, size=size)
-np.save("./workspace/movies/test/test.npy", movies)
+#size = (160,128)
+#movies = get_movies(file_names, frame_count=600, size=size)
+#np.save("./workspace/movies/test/test.npy", movies)
 
 # 次回以降
-#movies = np.load("./workspace/movies/test/test.npy")
+movies = np.load("./workspace/movies/test/test.npy")
 #print movies.shape
 
  
 for movie_id , movie_name in enumerate(sorted(file_names)):
+    print movie_id , " start "
     model.predictor.reset_state()
     movie = movies[movie_id][:-1]
     teacher = movies[movie_id][1:]
@@ -84,25 +88,17 @@ for movie_id , movie_name in enumerate(sorted(file_names)):
     if movie_name.split("/")[-1] in anomaly_files:
         label = labels[anomaly_files.index(movie_name.split("/")[-1])]
     else:
-        # 正常動画の場合
-        label = np.zeros((1,598))
+        label = np.zeros((598,))
 
-    # ラベルの長さだけlossを出力
-    for t in range(10):#range(len(label)) :
-        loss = model(F.expand_dims(chainer.Variable(movie[t],volatile=True) , axis = 0), F.expand_dims(chainer.Variable(teacher[t],volatile=True) ,axis=0 ))
-        whole_loss.append(loss.data)
+    for t in range(len(label)) :
+        loss = model(F.expand_dims(chainer.Variable(xp.asarray(movie[t]),volatile=True) , axis = 0), F.expand_dims(chainer.Variable(xp.asarray(teacher[t]),volatile=True) ,axis=0 ))
+        loss = chainer.cuda.to_cpu(loss.data)
+        whole_loss.append(loss)
         whole_label.append(label[t])
-
-
-
-
-
-
 
 
 # Compute ROC curve and area the curve
 fpr, tpr, thresholds = roc_curve(whole_label, whole_loss )
-print fpr , tpr , thresholds
 roc_auc = auc(fpr, tpr)
 print "Area under the ROC curve : %f" % roc_auc
 

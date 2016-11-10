@@ -23,13 +23,12 @@ import time
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--gpu', '-g', default=-1, type=int, help='GPU ID (negative value indicates CPU)')
-parser.add_argument('--model',  type=str ,default="1Layer_20_model.npz")
+parser.add_argument('--model',  type=str ,default="1Layer_99_model.npz")
 parser.add_argument('--len',  type=int , default=600)
 parser.add_argument('--out_name',  type=str , default="/workspace/output_movie.avi") # setting for docker run
 parser.add_argument('--data_root_path',  type=str , default="./movies/test/")
 args = parser.parse_args()
 
-xp = chainer.cuda.cupy if args.gpu >= 0 else np
 
 
 def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp4"):
@@ -46,6 +45,7 @@ def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp
     size = (160,128)
     movies = get_movies(movie_name_list, frame_count=args.len, size=size)
 
+    #model = L.Classifier( PredNet(width=160, height=128, channels=[3,48,96,192], batchSize=1 ), lossfun=F.mean_squared_error)
     model = L.Classifier( PredNet1Layer(width=160, height=128, channels=[3,48,96,192], batchSize=1 ), lossfun=F.mean_squared_error)
     #model = L.Classifier( PredNet2Layer(width=160, height=128, channels=[3,48,96,192], batchSize=1 ), lossfun=F.mean_squared_error)
     #model = L.Classifier( PredNet3Layer(width=160, height=128, channels=[3,48,96,192], batchSize=1 ), lossfun=F.mean_squared_error)
@@ -53,36 +53,44 @@ def make_predict_movie(model_file_name,movie_len = 600,out_name="output_movie.mp
     serializers.load_npz("/workspace/models/" + model_file_name ,model)
 
 
-    if args.gpu > 0 :
+    if args.gpu >= 0 :
         cuda.get_device(args.gpu).use()
         model.to_gpu()
+        model.predictor.to_gpu()
+        xp = chainer.cuda.cupy if args.gpu >= 0 else np
         print('Running on a GPU')
     else:
+        xp = chainer.cuda.cupy if args.gpu >= 0 else np
         print('Running on a CPU')
 
     predict_movie = np.zeros((movie_len - 1, 3 ,size[1],size[0]),dtype=np.float32)
-    for i in range(len(movies)):
-        make_movie(movies[i],file_name="./workspace/movie_"+ str(i) + "_real.avi",fps=30)
+    #for i in range(len(movies)):
+    #    make_movie(movies[i],file_name="./workspace/movie_"+ str(i) + "_real.avi",fps=30)
+    for i , movie_name in enumerate(movie_name_list):
+        print i ," " ,  movie_name
 
     for i in range(len(movies)):
         model.predictor.reset_state()
+        print movie_name_list[i] , " test start"
         x = movies[i]
         teacher = movies[i][1:]
 
         generated_movie = np.zeros((len(teacher),3,size[1] , size[0]),dtype=np.float32)
-        for frame, teacher in enumerate(teacher):
-            seq = F.expand_dims(xp.array(x[frame]) , axis=0)
-            t = F.expand_dims(xp.array(teacher) , axis=0)
+        for frame in range(len(teacher)):
+            print "frame ", frame 
+            seq = F.expand_dims(chainer.Variable(xp.asarray(x[frame]),volatile=True ), axis=0)
+            t = F.expand_dims(chainer.Variable(xp.asarray(teacher[frame]), volatile=True ), axis=0)
             loss = model(seq, t)
             if args.gpu >= 0:
-                model.y.to_cpu()
                 image = chainer.cuda.to_cpu(model.y.data)
             else:
                 image = model.y.data
             generated_movie[frame] = image
         model_name = args.model.split(".")[0]
         make_movie(generated_movie,file_name="./workspace/"+ model_name +"_predicted_movie_"+ str(i)+".avi",fps=30)
+        print movie_name_list[i] , " test end"
 
+    print "FINISH"
 
 
 
